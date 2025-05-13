@@ -1,0 +1,508 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hayes Build Ltd - Tool Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      font-family: 'Montserrat', sans-serif;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    .btn-blue {
+      background-color: #2E5A87;
+      transition: transform 0.1s ease, background-color 0.3s;
+    }
+    .btn-blue:hover {
+      background-color: #234973;
+      transform: scale(1.05);
+    }
+    .btn-orange {
+      background-color: #F28C38;
+      transition: transform 0.1s ease, background-color 0.3s;
+    }
+    .btn-orange:hover {
+      background-color: #d97a30;
+      transform: scale(1.05);
+    }
+    .text-orange {
+      color: #F28C38;
+    }
+    .header-gradient {
+      background: linear-gradient(90deg, #2E5A87, #F28C38);
+    }
+    .card {
+      transition: transform 0.2s ease, box-shadow 0.3s;
+    }
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+    }
+    .dark-mode {
+      background-color: #1a202c;
+      color: #e2e8f0;
+    }
+    .dark-mode .bg-white {
+      background-color: #2d3748;
+    }
+    .dark-mode .bg-gray-200 {
+      background-color: #4a5568;
+    }
+    .dark-mode .bg-gray-100 {
+      background-color: #1a202c;
+    }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background-color: #2E5A87;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 5px;
+      display: none;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div class="container mx-auto p-6">
+    <!-- Header -->
+    <div class="header-gradient p-4 rounded-lg shadow-lg mb-8">
+      <div class="flex items-center justify-between">
+        <img src="https://via.placeholder.com/300x100?text=Hayes+Build+Ltd+Logo" alt="Hayes Build Ltd Logo" class="h-20">
+        <button id="darkModeToggle" class="btn-blue text-white px-4 py-2 rounded">
+          <i class="fas fa-moon"></i> Toggle Dark Mode
+        </button>
+      </div>
+    </div>
+
+    <!-- Search and Filter -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6 card">
+      <h2 class="text-xl font-semibold text-orange mb-4"><i class="fas fa-search mr-2"></i>Search & Filter Tools</h2>
+      <div class="flex flex-col sm:flex-row gap-4">
+        <input type="text" id="searchInput" class="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Search by tool name...">
+        <select id="filterLocation" class="w-full sm:w-1/3 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-orange-500">
+          <option value="">All Locations</option>
+        </select>
+        <select id="filterStatus" class="w-full sm:w-1/3 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-orange-500">
+          <option value="">All Statuses</option>
+          <option value="Available">Available</option>
+          <option value="In Use">In Use</option>
+          <option value="Needs Repair">Needs Repair</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Tool List -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6 card">
+      <h2 class="text-xl font-semibold text-orange mb-4"><i class="fas fa-tools mr-2"></i>Tool List</h2>
+      <table class="w-full text-left">
+        <thead>
+          <tr class="bg-gray-200">
+            <th class="p-3">Name</th>
+            <th class="p-3">Category</th>
+            <th class="p-3">Location</th>
+            <th class="p-3">Status</th>
+            <th class="p-3">Condition</th>
+            <th class="p-3">Last Updated</th>
+            <th class="p-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="toolTableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Add Tool Button -->
+    <div class="text-center mb-6">
+      <button id="addToolBtn" class="btn-orange text-white px-6 py-3 rounded-lg shadow-md">
+        <i class="fas fa-plus mr-2"></i>Add Tool
+      </button>
+    </div>
+
+    <!-- Export/Import -->
+    <div class="flex justify-center gap-4 mb-6">
+      <button id="exportData" class="btn-blue text-white px-4 py-2 rounded hover:bg-blue-600">
+        <i class="fas fa-download mr-2"></i>Export Data
+      </button>
+      <input type="file" id="importData" accept=".json" class="p-2 border rounded">
+    </div>
+
+    <!-- Add Tool Modal -->
+    <div id="addToolModal" class="fixed inset-0 bg-gray-800 bg-opacity-50 hidden flex items-center justify-center">
+      <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
+        <h2 class="text-xl font-semibold text-orange mb-4">Add New Tool</h2>
+        <form id="addToolForm" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium">Tool Name</label>
+            <input type="text" id="addToolName" class="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="e.g., Drill" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Category</label>
+            <select id="addToolCategory" class="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+              <option value="Hand Tool">Hand Tool</option>
+              <option value="Power Tool">Power Tool</option>
+              <option value="Saw">Saw</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Location</label>
+            <input type="text" id="addToolLocation" class="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="e.g., Workshop" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Status</label>
+            <select id="addToolStatus" class="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+              <option value="Available">Available</option>
+              <option value="In Use">In Use</option>
+              <option value="Needs Repair">Needs Repair</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Condition</label>
+            <select id="addToolCondition" class="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+              <option value="Good">Good</option>
+              <option value="Worn">Worn</option>
+              <option value="Broken">Broken</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Updated By</label>
+            <input type="text" id="addUpdatedBy" class="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="e.g., Admin" required>
+          </div>
+          <div class="flex gap-4">
+            <button type="submit" class="btn-blue text-white px-4 py-2 rounded">Add Tool</button>
+            <button type="button" id="closeAddModal" class="bg-gray-300 text-black px-4 py-2 rounded hover:bg-gray-400">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Update Tool Modal -->
+    <div id="updateModal" class="fixed inset-0 bg-gray-800 bg-opacity-50 hidden flex items-center justify-center">
+      <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
+        <h2 class="text-xl font-semibold text-orange mb-4">Update Tool</h2>
+        <form id="updateForm" class="space-y-4">
+          <input type="hidden" id="updateToolId">
+          <div>
+            <label class="block text-sm font-medium">Tool Name</label>
+            <input type="text" id="updateToolName" class="w-full p-2 border rounded" disabled>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Category</label>
+            <input type="text" id="updateToolCategory" class="w-full p-2 border rounded" disabled>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Location</label>
+            <input type="text" id="updateToolLocation" class="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Status</label>
+            <select id="updateToolStatus" class="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+              <option value="Available">Available</option>
+              <option value="In Use">In Use</option>
+              <option value="Needs Repair">Needs Repair</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Condition</label>
+            <select id="updateToolCondition" class="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+              <option value="Good">Good</option>
+              <option value="Worn">Worn</option>
+              <option value="Broken">Broken</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Updated By</label>
+            <input type="text" id="updateUpdatedBy" class="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="e.g., John" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">History (Last 3 Updates)</label>
+            <ul id="toolHistory" class="list-disc pl-5 text-sm text-gray-600"></ul>
+          </div>
+          <div class="flex gap-4">
+            <button type="submit" class="btn-blue text-white px-4 py-2 rounded">Update Tool</button>
+            <button type="button" id="closeUpdateModal" class="bg-gray-300 text-black px-4 py-2 rounded hover:bg-gray-400">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <script>
+    const ADMIN_PASSWORD = "hayesadmin";
+    let tools = JSON.parse(localStorage.getItem('tools')) || [
+      { name: "Hammer", category: "Hand Tool", location: "Workshop", status: "Available", condition: "Good", updatedBy: "Admin", updatedAt: new Date().toISOString(), history: [] },
+      { name: "Mitre Saw", category: "Saw", location: "Workshop", status: "Available", condition: "Good", updatedBy: "Admin", updatedAt: new Date().toISOString(), history: [] },
+      { name: "Chainsaw", category: "Saw", location: "Workshop", status: "Available", condition: "Good", updatedBy: "Admin", updatedAt: new Date().toISOString(), history: [] }
+    ];
+
+    // Save tools to localStorage
+    function saveTools() {
+      localStorage.setItem('tools', JSON.stringify(tools));
+    }
+
+    // Show toast notification
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.style.display = 'block';
+      setTimeout(() => {
+        toast.style.display = 'none';
+      }, 3000);
+    }
+
+    // Render tool table
+    function renderTable(filter = {}) {
+      const tbody = document.getElementById('toolTableBody');
+      tbody.innerHTML = '';
+      let filteredTools = tools;
+
+      if (filter.search) {
+        filteredTools = filteredTools.filter(tool =>
+          tool.name.toLowerCase().includes(filter.search.toLowerCase())
+        );
+      }
+      if (filter.location) {
+        filteredTools = filteredTools.filter(tool => tool.location === filter.location);
+      }
+      if (filter.status) {
+        filteredTools = filteredTools.filter(tool => tool.status === filter.status);
+      }
+
+      filteredTools.forEach((tool, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td class="p-3">${tool.name}</td>
+          <td class="p-3">${tool.category}</td>
+          <td class="p-3">${tool.location}</td>
+          <td class="p-3">${tool.status}</td>
+          <td class="p-3">${tool.condition}</td>
+          <td class="p-3">${tool.updatedBy} (${new Date(tool.updatedAt).toLocaleString()})</td>
+          <td class="p-3">
+            <button onclick="openUpdateModal(${index})" class="text-blue-500 hover:underline">Update</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    // Update location filter options
+    function updateLocationFilter() {
+      const filterLocation = document.getElementById('filterLocation');
+      const locations = [...new Set(tools.map(tool => tool.location))];
+      filterLocation.innerHTML = '<option value="">All Locations</option>';
+      locations.forEach(loc => {
+        const option = document.createElement('option');
+        option.value = loc;
+        option.textContent = loc;
+        filterLocation.appendChild(option);
+      });
+    }
+
+    // Open add tool modal
+    window.openAddToolModal = function() {
+      const password = prompt("Enter admin password to add a tool:");
+      if (password === ADMIN_PASSWORD) {
+        document.getElementById('addToolModal').classList.remove('hidden');
+      } else {
+        alert("Incorrect password. Only admins can add tools.");
+      }
+    };
+
+    // Close add tool modal
+    document.getElementById('closeAddModal').addEventListener('click', function() {
+      document.getElementById('addToolModal').classList.add('hidden');
+    });
+
+    // Add tool form submission
+    document.getElementById('addToolForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const tool = {
+        name: document.getElementById('addToolName').value,
+        category: document.getElementById('addToolCategory').value,
+        location: document.getElementById('addToolLocation').value,
+        status: document.getElementById('addToolStatus').value,
+        condition: document.getElementById('addToolCondition').value,
+        updatedBy: document.getElementById('addUpdatedBy').value,
+        updatedAt: new Date().toISOString(),
+        history: []
+      };
+      tools.push(tool);
+      saveTools();
+      updateLocationFilter();
+      renderTable();
+      document.getElementById('addToolModal').classList.add('hidden');
+      this.reset();
+      showToast("Tool added successfully!");
+    });
+
+    // Open update modal
+    window.openUpdateModal = function(index) {
+      const tool = tools[index];
+      document.getElementById('updateToolId').value = index;
+      document.getElementById('updateToolName').value = tool.name;
+      document.getElementById('updateToolCategory').value = tool.category;
+      document.getElementById('updateToolLocation').value = tool.location;
+      document.getElementById('updateToolStatus').value = tool.status;
+      document.getElementById('updateToolCondition').value = tool.condition;
+      document.getElementById('updateUpdatedBy').value = tool.updatedBy;
+
+      // Populate history
+      const historyList = document.getElementById('toolHistory');
+      historyList.innerHTML = '';
+      tool.history.slice(-3).forEach(entry => {
+        const li = document.createElement('li');
+        li.textContent = entry;
+        historyList.appendChild(li);
+      });
+
+      document.getElementById('updateModal').classList.remove('hidden');
+    };
+
+    // Close update modal
+    document.getElementById('closeUpdateModal').addEventListener('click', function() {
+      document.getElementById('updateModal').classList.add('hidden');
+    });
+
+    // Update form submission
+    document.getElementById('updateForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const toolId = document.getElementById('updateToolId').value;
+      const tool = tools[parseInt(toolId)];
+      const updateEntry = `Moved to ${document.getElementById('updateToolLocation').value} by ${document.getElementById('updateUpdatedBy').value} on ${new Date().toLocaleString()}`;
+      tool.history.push(updateEntry);
+      if (tool.history.length > 3) tool.history.shift(); // Keep only last 3 entries
+
+      tools[parseInt(toolId)] = {
+        name: tool.name,
+        category: tool.category,
+        location: document.getElementById('updateToolLocation').value,
+        status: document.getElementById('updateToolStatus').value,
+        condition: document.getElementById('updateToolCondition').value,
+        updatedBy: document.getElementById('updateUpdatedBy').value,
+        updatedAt: new Date().toISOString(),
+        history: tool.history
+      };
+      saveTools();
+      updateLocationFilter();
+      renderTable();
+      document.getElementById('updateModal').classList.add('hidden');
+      showToast("Tool updated successfully!");
+    });
+
+    // Search and filter
+    document.getElementById('searchInput').addEventListener('input', function() {
+      renderTable({
+        search: this.value,
+        location: document.getElementById('filterLocation').value,
+        status: document.getElementById('filterStatus').value
+      });
+    });
+
+    document.getElementById('filterLocation').addEventListener('change', function() {
+      renderTable({
+        search: document.getElementById('searchInput').value,
+        location: this.value,
+        status: document.getElementById('filterStatus').value
+      });
+    });
+
+    document.getElementById('filterStatus').addEventListener('change', function() {
+      renderTable({
+        search: document.getElementById('searchInput').value,
+        location: document.getElementById('filterLocation').value,
+        status: this.value
+      });
+    });
+
+    // Export data
+    document.getElementById('exportData').addEventListener('click', function() {
+      const dataStr = JSON.stringify(tools);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'tools.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Data exported successfully!");
+    });
+
+    // Import data
+    document.getElementById('importData').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          tools = JSON.parse(e.target.result);
+          saveTools();
+          updateLocationFilter();
+          renderTable();
+          showToast("Data imported successfully!");
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    // Dark mode toggle
+    document.getElementById('darkModeToggle').addEventListener('click', function() {
+      document.body.classList.toggle('dark-mode');
+      this.innerHTML = document.body.classList.contains('dark-mode')
+        ? '<i class="fas fa-sun mr-2"></i> Toggle Light Mode'
+        : '<i class="fas fa-moon mr-2"></i> Toggle Dark Mode';
+    });
+
+    // Add tool button event
+    document.getElementById('addToolBtn').addEventListener('click', openAddToolModal);
+
+    // Initial render
+    updateLocationFilter();
+    renderTable();
+  </script>
+</body>
+</html>
