@@ -1,0 +1,349 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hayes Build Ltd - Tool Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f0f0f0;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      text-align: center;
+      color: #2E5A87;
+    }
+    h2 {
+      color: #F28C38;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: left;
+    }
+    th {
+      background-color: #e0e0e0;
+    }
+    button {
+      padding: 8px 16px;
+      margin: 5px;
+      cursor: pointer;
+      background-color: #2E5A87;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    button:hover {
+      background-color: #234973;
+    }
+    .add-btn {
+      background-color: #F28C38;
+    }
+    .add-btn:hover {
+      background-color: #d97a30;
+    }
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-content {
+      background: white;
+      padding: 20px;
+      border-radius: 5px;
+      width: 400px;
+    }
+    .modal-content label {
+      display: block;
+      margin: 10px 0 5px;
+    }
+    .modal-content input, .modal-content select {
+      width: 100%;
+      padding: 5px;
+      margin-bottom: 10px;
+      box-sizing: border-box;
+    }
+    .modal-content ul {
+      list-style: disc;
+      padding-left: 20px;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Hayes Build Ltd - Tool Tracker</h1>
+
+    <!-- Tool List -->
+    <div>
+      <h2>Tool List</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Location</th>
+            <th>Status</th>
+            <th>Condition</th>
+            <th>Last Updated</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="toolTableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Add Tool Button -->
+    <div style="text-align: center;">
+      <button class="add-btn" onclick="openAddToolModal()">Add Tool</button>
+    </div>
+
+    <!-- Add Tool Modal -->
+    <div id="addToolModal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Add New Tool</h2>
+        <form id="addToolForm">
+          <label>Tool Name</label>
+          <input type="text" id="addToolName" placeholder="e.g., Drill" required>
+          <label>Category</label>
+          <select id="addToolCategory" required>
+            <option value="Hand Tool">Hand Tool</option>
+            <option value="Power Tool">Power Tool</option>
+            <option value="Saw">Saw</option>
+            <option value="Other">Other</option>
+          </select>
+          <label>Location</label>
+          <input type="text" id="addToolLocation" placeholder="e.g., Workshop" required>
+          <label>Status</label>
+          <select id="addToolStatus" required>
+            <option value="Available">Available</option>
+            <option value="In Use">In Use</option>
+            <option value="Needs Repair">Needs Repair</option>
+          </select>
+          <label>Condition</label>
+          <select id="addToolCondition" required>
+            <option value="Good">Good</option>
+            <option value="Worn">Worn</option>
+            <option value="Broken">Broken</option>
+          </select>
+          <label>Updated By</label>
+          <input type="text" id="addUpdatedBy" placeholder="e.g., Admin" required>
+          <div>
+            <button type="submit">Add Tool</button>
+            <button type="button" onclick="document.getElementById('addToolModal').classList.add('hidden')">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Update Tool Modal -->
+    <div id="updateModal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Update Tool</h2>
+        <form id="updateForm">
+          <input type="hidden" id="updateToolId">
+          <label>Tool Name</label>
+          <input type="text" id="updateToolName" disabled>
+          <label>Category</label>
+          <input type="text" id="updateToolCategory" disabled>
+          <label>Location</label>
+          <input type="text" id="updateToolLocation" required>
+          <label>Status</label>
+          <select id="updateToolStatus" required>
+            <option value="Available">Available</option>
+            <option value="In Use">In Use</option>
+            <option value="Needs Repair">Needs Repair</option>
+          </select>
+          <label>Condition</label>
+          <select id="updateToolCondition" required>
+            <option value="Good">Good</option>
+            <option value="Worn">Worn</option>
+            <option value="Broken">Broken</option>
+          </select>
+          <label>Updated By</label>
+          <input type="text" id="updateUpdatedBy" placeholder="e.g., John" required>
+          <label>History (Last 3 Updates)</label>
+          <ul id="toolHistory"></ul>
+          <div>
+            <button type="submit">Update Tool</button>
+            <button type="button" onclick="document.getElementById('updateModal').classList.add('hidden')">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ADMIN_PASSWORD = "hayesadmin";
+    let tools = JSON.parse(localStorage.getItem('tools')) || [
+      { name: "Hammer", category: "Hand Tool", location: "Workshop", status: "Available", condition: "Good", updatedBy: "Admin", updatedAt: new Date().toISOString(), history: [] },
+      { name: "Mitre Saw", category: "Saw", location: "Workshop", status: "Available", condition: "Good", updatedBy: "Admin", updatedAt: new Date().toISOString(), history: [] },
+      { name: "Chainsaw", category: "Saw", location: "Workshop", status: "Available", condition: "Good", updatedBy: "Admin", updatedAt: new Date().toISOString(), history: [] }
+    ];
+
+    // Save tools to localStorage
+    function saveTools() {
+      localStorage.setItem('tools', JSON.stringify(tools));
+    }
+
+    // Render tool table
+    function renderTable() {
+      const tbody = document.getElementById('toolTableBody');
+      tbody.innerHTML = '';
+      tools.forEach((tool, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${tool.name}</td>
+          <td>${tool.category}</td>
+          <td>${tool.location}</td>
+          <td>${tool.status}</td>
+          <td>${tool.condition}</td>
+          <td>${tool.updatedBy} (${new Date(tool.updatedAt).toLocaleString()})</td>
+          <td>
+            <button onclick="openUpdateModal(${index})">Update</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    // Open add tool modal
+    window.openAddToolModal = function() {
+      const password = prompt("Enter admin password to add a tool:");
+      if (password === ADMIN_PASSWORD) {
+        document.getElementById('addToolModal').classList.remove('hidden');
+      } else {
+        alert("Incorrect password. Only admins can add tools.");
+      }
+    };
+
+    // Add tool form submission
+    document.getElementById('addToolForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const tool = {
+        name: document.getElementById('addToolName').value,
+        category: document.getElementById('addToolCategory').value,
+        location: document.getElementById('addToolLocation').value,
+        status: document.getElementById('addToolStatus').value,
+        condition: document.getElementById('addToolCondition').value,
+        updatedBy: document.getElementById('addUpdatedBy').value,
+        updatedAt: new Date().toISOString(),
+        history: []
+      };
+      tools.push(tool);
+      saveTools();
+      renderTable();
+      document.getElementById('addToolModal').classList.add('hidden');
+      this.reset();
+    });
+
+    // Open update modal
+    window.openUpdateModal = function(index) {
+      const tool = tools[index];
+      document.getElementById('updateToolId').value = index;
+      document.getElementById('updateToolName').value = tool.name;
+      document.getElementById('updateToolCategory').value = tool.category;
+      document.getElementById('updateToolLocation').value = tool.location;
+      document.getElementById('updateToolStatus').value = tool.status;
+      document.getElementById('updateToolCondition').value = tool.condition;
+      document.getElementById('updateUpdatedBy').value = tool.updatedBy;
+
+      // Populate history
+      const historyList = document.getElementById('toolHistory');
+      historyList.innerHTML = '';
+      tool.history.slice(-3).forEach(entry => {
+        const li = document.createElement('li');
+        li.textContent = entry;
+        historyList.appendChild(li);
+      });
+
+      document.getElementById('updateModal').classList.remove('hidden');
+    };
+
+    // Update form submission
+    document.getElementById('updateForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const toolId = document.getElementById('updateToolId').value;
+      const tool = tools[parseInt(toolId)];
+      const updateEntry = `Moved to ${document.getElementById('updateToolLocation').value} by ${document.getElementById('updateUpdatedBy').value} on ${new Date().toLocaleString()}`;
+      tool.history.push(updateEntry);
+      if (tool.history.length > 3) tool.history.shift();
+
+      tools[parseInt(toolId)] = {
+        name: tool.name,
+        category: tool.category,
+        location: document.getElementById('updateToolLocation').value,
+        status: document.getElementById('updateToolStatus').value,
+        condition: document.getElementById('updateToolCondition').value,
+        updatedBy: document.getElementById('updateUpdatedBy').value,
+        updatedAt: new Date().toISOString(),
+        history: tool.history
+      };
+      saveTools();
+      renderTable();
+      document.getElementById('updateModal').classList.add('hidden');
+    });
+
+    // Initial render
+    renderTable();
+  </script>
+</body>
+</html>
